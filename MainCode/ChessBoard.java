@@ -29,6 +29,8 @@ public class ChessBoard extends JFrame {
                     square.setBackground(Color.WHITE);
                 } else {
                     square.setBackground(Color.BLACK);
+                    square.setOpaque(true);
+                    square.setBorderPainted(false);
                 }
 
                 add(square);

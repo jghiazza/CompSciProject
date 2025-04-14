@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import javax.imageio.ImageIO;
 
 public class ChessBoard extends JFrame {
     private static final int BOARD_SIZE = 8; // 8x8 Chessboard

@@ -2,6 +2,12 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 public class ChessBoard extends JFrame {
     private static final int BOARD_SIZE = 8; // 8x8 Chessboard
@@ -21,10 +27,31 @@ public class ChessBoard extends JFrame {
     private int selectedRow = -1;
     private int selectedCol = -1;
     
+    // For highlighting suggested moves
+    private List<Point> highlightedSquares = new ArrayList<>();
+    
+    // Panels to display captured pieces
+    private JPanel whiteCapturedPanel;
+    private JPanel blackCapturedPanel;
+    
+    // Track captured pieces
+    private List<String> whiteCapturedPieces = new ArrayList<>();
+    private List<String> blackCapturedPieces = new ArrayList<>();
+    
+    // Chess piece images
+    private Map<String, ImageIcon> pieceImages = new HashMap<>();
+    
+    // Board colors
+    private final Color lightSquareColor = new Color(240, 240, 210); // Light beige
+    private final Color darkSquareColor = new Color(120, 150, 90);  // Olive green
+    
     public ChessBoard() {
         setTitle("Chess Board");
-        setSize(650, 700); // Increased height to accommodate status label
+        setSize(650, 800); // Increased height for captured pieces panels
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        
+        // Load chess piece images
+        loadPieceImages();
         
         // Main panel with border layout
         JPanel mainPanel = new JPanel(new BorderLayout());
@@ -32,10 +59,15 @@ public class ChessBoard extends JFrame {
         // Board panel with grid layout
         JPanel boardPanel = new JPanel(new GridLayout(BOARD_SIZE + 1, BOARD_SIZE + 1));
         
+        // Create panels for captured pieces
+        createCapturedPiecesPanels();
+        
         // Labels for the top row (A-H)
         boardPanel.add(new JLabel("")); // Empty top-left corner
         for (char c = 'A'; c <= 'H'; c++) {
-            boardPanel.add(new JLabel(String.valueOf(c), SwingConstants.CENTER));
+            JLabel label = new JLabel(String.valueOf(c), SwingConstants.CENTER);
+            label.setFont(new Font("Arial", Font.BOLD, 14));
+            boardPanel.add(label);
         }
 
         // Initialize the chess pieces
@@ -44,17 +76,20 @@ public class ChessBoard extends JFrame {
         // Initialize game logic
         game = new ChessGame(board);
         
-        // Create the chessboard with alternating black and white tiles
+        // Create the chessboard with alternating light and dark tiles
         for (int row = 0; row < BOARD_SIZE; row++) {
-            boardPanel.add(new JLabel(String.valueOf(8 - row), SwingConstants.CENTER)); // Row labels (8-1)
+            JLabel rowLabel = new JLabel(String.valueOf(8 - row), SwingConstants.CENTER);
+            rowLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            boardPanel.add(rowLabel); // Row labels (8-1)
 
             for (int col = 0; col < BOARD_SIZE; col++) {
                 JButton square = new JButton();
-                square.setFont(new Font("Arial", Font.BOLD, 12));
+                square.setBorderPainted(false);
+                square.setFocusPainted(false);
                 
-                // Set piece names if present
+                // Set piece images if present
                 if (board[row][col] != null) {
-                    square.setText(board[row][col]);
+                    square.setIcon(pieceImages.get(board[row][col]));
                 }
                 
                 // Add click listener for piece movement
@@ -67,15 +102,12 @@ public class ChessBoard extends JFrame {
                     }
                 });
 
-                // Alternating black & white pattern
+                // Alternating light & dark pattern
                 if ((row + col) % 2 == 0) {
-                    square.setBackground(Color.WHITE);
-                    square.setForeground(Color.BLACK);
+                    square.setBackground(lightSquareColor);
                 } else {
-                    square.setBackground(Color.GRAY);
-                    square.setForeground(Color.WHITE);
+                    square.setBackground(darkSquareColor);
                     square.setOpaque(true);
-                    square.setBorderPainted(false);
                 }
 
                 squares[row][col] = square;
@@ -89,13 +121,132 @@ public class ChessBoard extends JFrame {
         statusLabel.setFont(new Font("Arial", Font.BOLD, 16));
         statusLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
         
+        // Create suggestion buttons panel
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        
+        JButton suggestMoveButton = new JButton("Suggest Move");
+        suggestMoveButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                suggestValidMove();
+            }
+        });
+        
+        JButton suggestCaptureButton = new JButton("Suggest Capture");
+        suggestCaptureButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                suggestCapture();
+            }
+        });
+        
+        JButton resetButton = new JButton("Clear Suggestions");
+        resetButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                clearHighlights();
+                statusLabel.setText(game.isWhiteTurn() ? "White's turn to move" : "Black's turn to move");
+            }
+        });
+        
+        buttonPanel.add(suggestMoveButton);
+        buttonPanel.add(suggestCaptureButton);
+        buttonPanel.add(resetButton);
+        
+        // Create a panel for the center section (captured pieces + board + status)
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(blackCapturedPanel, BorderLayout.NORTH);
+        centerPanel.add(boardPanel, BorderLayout.CENTER);
+        centerPanel.add(whiteCapturedPanel, BorderLayout.SOUTH);
+        
         // Add components to main panel
-        mainPanel.add(boardPanel, BorderLayout.CENTER);
-        mainPanel.add(statusLabel, BorderLayout.SOUTH);
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+        mainPanel.add(statusLabel, BorderLayout.NORTH);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
         
         // Set content pane
         setContentPane(mainPanel);
         setVisible(true);
+    }
+    
+    private void loadPieceImages() {
+        try {
+            // Path to the image resources
+            String imagePath = "resources/chess_pieces/";
+            
+            // Load white pieces
+            pieceImages.put("W-Pawn", new ImageIcon(new File(imagePath + "white_pawn.png").getAbsolutePath()));
+            pieceImages.put("W-Rook", new ImageIcon(new File(imagePath + "white_rook.png").getAbsolutePath()));
+            pieceImages.put("W-Knight", new ImageIcon(new File(imagePath + "white_knight.png").getAbsolutePath()));
+            pieceImages.put("W-Bishop", new ImageIcon(new File(imagePath + "white_bishop.png").getAbsolutePath()));
+            pieceImages.put("W-Queen", new ImageIcon(new File(imagePath + "white_queen.png").getAbsolutePath()));
+            pieceImages.put("W-King", new ImageIcon(new File(imagePath + "white_king.png").getAbsolutePath()));
+            
+            // Load black pieces
+            pieceImages.put("B-Pawn", new ImageIcon(new File(imagePath + "black_pawn.png").getAbsolutePath()));
+            pieceImages.put("B-Rook", new ImageIcon(new File(imagePath + "black_rook.png").getAbsolutePath()));
+            pieceImages.put("B-Knight", new ImageIcon(new File(imagePath + "black_knight.png").getAbsolutePath()));
+            pieceImages.put("B-Bishop", new ImageIcon(new File(imagePath + "black_bishop.png").getAbsolutePath()));
+            pieceImages.put("B-Queen", new ImageIcon(new File(imagePath + "black_queen.png").getAbsolutePath()));
+            pieceImages.put("B-King", new ImageIcon(new File(imagePath + "black_king.png").getAbsolutePath()));
+        } catch (Exception e) {
+            System.err.println("Error loading chess piece images: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, 
+                "Could not load chess piece images. Using text instead.\n" + e.getMessage(),
+                "Image Loading Error", JOptionPane.ERROR_MESSAGE);
+            
+            // If images can't be loaded, we'll continue with text-based pieces
+        }
+    }
+    
+    private void createCapturedPiecesPanels() {
+        // Panel for white captured pieces (displayed at the bottom)
+        whiteCapturedPanel = new JPanel();
+        whiteCapturedPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
+        whiteCapturedPanel.setBorder(BorderFactory.createTitledBorder("White Captured Pieces"));
+        whiteCapturedPanel.setPreferredSize(new Dimension(650, 60));
+        
+        // Panel for black captured pieces (displayed at the top)
+        blackCapturedPanel = new JPanel();
+        blackCapturedPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
+        blackCapturedPanel.setBorder(BorderFactory.createTitledBorder("Black Captured Pieces"));
+        blackCapturedPanel.setPreferredSize(new Dimension(650, 60));
+    }
+    
+    private void updateCapturedPiecesDisplay() {
+        // Clear both panels
+        whiteCapturedPanel.removeAll();
+        blackCapturedPanel.removeAll();
+        
+        // Add white captured pieces
+        for (String piece : whiteCapturedPieces) {
+            JLabel pieceLabel;
+            if (pieceImages.containsKey(piece)) {
+                pieceLabel = new JLabel(pieceImages.get(piece));
+            } else {
+                pieceLabel = new JLabel(piece);
+                pieceLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            }
+            whiteCapturedPanel.add(pieceLabel);
+        }
+        
+        // Add black captured pieces
+        for (String piece : blackCapturedPieces) {
+            JLabel pieceLabel;
+            if (pieceImages.containsKey(piece)) {
+                pieceLabel = new JLabel(pieceImages.get(piece));
+            } else {
+                pieceLabel = new JLabel(piece);
+                pieceLabel.setFont(new Font("Arial", Font.BOLD, 14));
+            }
+            blackCapturedPanel.add(pieceLabel);
+        }
+        
+        // Refresh the display
+        whiteCapturedPanel.revalidate();
+        whiteCapturedPanel.repaint();
+        blackCapturedPanel.revalidate();
+        blackCapturedPanel.repaint();
     }
     
     private void initializeBoard() {
@@ -131,6 +282,9 @@ public class ChessBoard extends JFrame {
     }
     
     private void handleSquareClick(int row, int col) {
+        // Clear any existing highlights
+        clearHighlights();
+        
         // If no piece is selected and the clicked square has a piece
         if (selectedPiece == null && board[row][col] != null) {
             boolean isWhitePiece = board[row][col].startsWith("W");
@@ -167,11 +321,25 @@ public class ChessBoard extends JFrame {
                 String selectedPieceText = board[selectedRow][selectedCol];
                 String destinationPieceText = board[row][col];
                 
+                // Check if this is a capture
+                boolean isCapture = destinationPieceText != null;
+                
                 // Try to make the move
                 if (game.makeMove(selectedRow, selectedCol, row, col)) {
-                    // Update the UI
-                    squares[row][col].setText(board[row][col]);
-                    selectedPiece.setText("");
+                    // Update the UI with images
+                    squares[row][col].setIcon(pieceImages.get(board[row][col]));
+                    selectedPiece.setIcon(null);
+                    
+                    // If it was a capture, add to the appropriate captured list
+                    if (isCapture) {
+                        boolean capturedWhitePiece = destinationPieceText.startsWith("W");
+                        if (capturedWhitePiece) {
+                            whiteCapturedPieces.add(destinationPieceText);
+                        } else {
+                            blackCapturedPieces.add(destinationPieceText);
+                        }
+                        updateCapturedPiecesDisplay();
+                    }
                     
                     // Reset colors
                     resetSquareColor(selectedRow, selectedCol);
@@ -217,13 +385,141 @@ public class ChessBoard extends JFrame {
     
     private void resetSquareColor(int row, int col) {
         if ((row + col) % 2 == 0) {
-            squares[row][col].setBackground(Color.WHITE);
+            squares[row][col].setBackground(lightSquareColor);
         } else {
-            squares[row][col].setBackground(Color.GRAY);
+            squares[row][col].setBackground(darkSquareColor);
         }
+    }
+    
+    private void suggestValidMove() {
+        clearHighlights();
+        
+        boolean isWhiteTurn = game.isWhiteTurn();
+        List<MoveOption> validMoves = new ArrayList<>();
+        
+        // Find a valid move for the current player
+        for (int startRow = 0; startRow < BOARD_SIZE; startRow++) {
+            for (int startCol = 0; startCol < BOARD_SIZE; startCol++) {
+                // Check if there's a piece belonging to the current player
+                if (board[startRow][startCol] != null && 
+                    (board[startRow][startCol].startsWith("W") == isWhiteTurn)) {
+                    
+                    // Look for valid moves for this piece
+                    for (int endRow = 0; endRow < BOARD_SIZE; endRow++) {
+                        for (int endCol = 0; endCol < BOARD_SIZE; endCol++) {
+                            if (game.isValidMove(startRow, startCol, endRow, endCol) && 
+                                board[endRow][endCol] == null) { // Only non-capturing moves
+                                validMoves.add(new MoveOption(startRow, startCol, endRow, endCol));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (validMoves.isEmpty()) {
+            statusLabel.setText("No valid moves found!");
+            return;
+        }
+        
+        // Select a random valid move
+        Random rand = new Random();
+        MoveOption move = validMoves.get(rand.nextInt(validMoves.size()));
+        
+        // Highlight the move
+        squares[move.startRow][move.startCol].setBackground(Color.GREEN);
+        squares[move.endRow][move.endCol].setBackground(Color.CYAN);
+        
+        // Add to highlighted squares list
+        highlightedSquares.add(new Point(move.startRow, move.startCol));
+        highlightedSquares.add(new Point(move.endRow, move.endCol));
+        
+        // Display suggestion
+        String piece = board[move.startRow][move.startCol];
+        statusLabel.setText("Suggestion: Move " + piece + " from " + 
+                           getSquareName(move.startRow, move.startCol) + " to " + 
+                           getSquareName(move.endRow, move.endCol));
+    }
+    
+    private void suggestCapture() {
+        clearHighlights();
+        
+        boolean isWhiteTurn = game.isWhiteTurn();
+        List<MoveOption> captures = new ArrayList<>();
+        
+        // Find a capture move for the current player
+        for (int startRow = 0; startRow < BOARD_SIZE; startRow++) {
+            for (int startCol = 0; startCol < BOARD_SIZE; startCol++) {
+                // Check if there's a piece belonging to the current player
+                if (board[startRow][startCol] != null && 
+                    (board[startRow][startCol].startsWith("W") == isWhiteTurn)) {
+                    
+                    // Look for valid capture moves for this piece
+                    for (int endRow = 0; endRow < BOARD_SIZE; endRow++) {
+                        for (int endCol = 0; endCol < BOARD_SIZE; endCol++) {
+                            if (board[endRow][endCol] != null && 
+                                (board[endRow][endCol].startsWith("W") != isWhiteTurn) && 
+                                game.isValidMove(startRow, startCol, endRow, endCol)) {
+                                captures.add(new MoveOption(startRow, startCol, endRow, endCol));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (captures.isEmpty()) {
+            statusLabel.setText("No capture moves available!");
+            return;
+        }
+        
+        // Select a random capture
+        Random rand = new Random();
+        MoveOption move = captures.get(rand.nextInt(captures.size()));
+        
+        // Highlight the move
+        squares[move.startRow][move.startCol].setBackground(Color.GREEN);
+        squares[move.endRow][move.endCol].setBackground(Color.RED);
+        
+        // Add to highlighted squares list
+        highlightedSquares.add(new Point(move.startRow, move.startCol));
+        highlightedSquares.add(new Point(move.endRow, move.endCol));
+        
+        // Display suggestion
+        String attacker = board[move.startRow][move.startCol];
+        String target = board[move.endRow][move.endCol];
+        statusLabel.setText("Capture suggestion: Use " + attacker + " at " + 
+                           getSquareName(move.startRow, move.startCol) + " to capture " + 
+                           target + " at " + getSquareName(move.endRow, move.endCol));
+    }
+    
+    private void clearHighlights() {
+        // Reset colors of all previously highlighted squares
+        for (Point p : highlightedSquares) {
+            resetSquareColor(p.x, p.y);
+        }
+        highlightedSquares.clear();
+    }
+    
+    private String getSquareName(int row, int col) {
+        char file = (char)('A' + col);
+        int rank = 8 - row;
+        return "" + file + rank;
     }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(ChessBoard::new);
+    }
+    
+    // Inner class to store move suggestions
+    private static class MoveOption {
+        int startRow, startCol, endRow, endCol;
+        
+        public MoveOption(int startRow, int startCol, int endRow, int endCol) {
+            this.startRow = startRow;
+            this.startCol = startCol;
+            this.endRow = endRow;
+            this.endCol = endCol;
+        }
     }
 }

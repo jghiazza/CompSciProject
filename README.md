@@ -2,6 +2,10 @@
 
 This is a Java-based chess game implementation with a graphical user interface using Swing. The game features a complete chess board with all standard pieces, move validation, and game state tracking.
 
+## Screenshot
+<img width="651" alt="image" src="https://github.com/user-attachments/assets/f09b08ee-b8ba-4d81-9837-15743a9fa7a2" />
+
+
 ## Project Structure
 
 The project is organized into the following main components:
